@@ -25,7 +25,7 @@ print_usage() {
     exit 1
 }
 
-if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+if [ $# -ne 1 ] && [ $# -ne 3 ]; then
     print_usage
 fi
 
