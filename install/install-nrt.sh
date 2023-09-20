@@ -173,7 +173,7 @@ echo "##### Installing: chart ran"
 ./helm/ran/certs/gen-certs.sh 10
 check_error $?
 
-helm install --wait --create-namespace -n ran -f helm/global-values.yaml ran helm/ran
+helm install --wait --create-namespace -n ran -f helm/global-values.yaml ran helm/ran --set WORKDIR=$(pwd)
 
 echo ""
 
