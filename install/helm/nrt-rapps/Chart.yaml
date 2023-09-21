@@ -16,8 +16,8 @@
 #
 
 apiVersion: v2
-name: nrt-pm-rpp
-description: NRT PM rapp chart
+name: nrt-rapps
+description: NRT PM and ES rApps chart
 
 # A chart can be either an 'application' or a 'library' chart.
 #

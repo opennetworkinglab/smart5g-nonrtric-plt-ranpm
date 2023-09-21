@@ -18,14 +18,14 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: pm-rapp
+  name: rapps
   namespace: nonrtric
   labels:
-    app: pm-rapp
+    app: rapps
 spec:
   containers:
   - name: pm-rapp
-    image: {{ .Values.global.extimagerepo }}/pm-rapp:latest
+    image: {{ .Values.global.extimagerepo }}pm-rapp:latest
     {{- if .Values.global.extimagerepo }}
     imagePullPolicy: Always
     {{- else }}
@@ -66,8 +66,38 @@ spec:
     volumeMounts:
     - mountPath: /config
       name: pm-rapp-jobdef
+    - mountPath: /output/prb_usage_reports
+      name: shared-data
+
+  - name: es-rapp
+    image: {{ .Values.global.extimagerepo }}es-rapp:latest
+    {{- if .Values.global.extimagerepo }}
+    imagePullPolicy: Always
+    {{- else }}
+    imagePullPolicy: Never
+    {{- end }}
+    env:
+    - name: SDN_CONTROLLER_ADDRESS
+      value: "controller.nonrtric"
+    - name: SDN_CONTROLLER_PORT
+      value: "8181"
+    - name: SDN_CONTROLLER_USERNAME
+      value: "admin"
+    - name: SDN_CONTROLLER_PASSWORD
+      value: "Kp8bJ4SXszM0WXlhak3eHlcse2gAw84vaoGGmJvUy2U"
+    - name: A1T_ADDRESS
+      value: "onos-a1t.riab"
+    - name: A1T_PORT
+      value: "9639"
+    - name: RANSIM_DATA_PATH
+      value: /input/prb_usage_reports
+    volumeMounts:
+    - mountPath: /input/prb_usage_reports
+      name: shared-data
+
   volumes:
   - configMap:
       name: pm-rapp-jobdef
     name: pm-rapp-jobdef
-
+  - name: shared-data
+    emptyDir: {}
