@@ -1,0 +1,74 @@
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''' 
+' Copyright 2023 Open Networking Foundation
+' This work is licensed under a Creative Commons Attribution 4.0 International License.
+' SPDX-License-Identifier: CC-BY-4.0
+' https://creativecommons.org/licenses/by/4.0/deed.en
+
+@startuml flow-diagram
+title Cell ON/OFF message flow
+autonumber 1 1 "<b>[00]"
+
+
+box "SMO" #Gold
+    participant "SDN Controller" as controller
+    participant "VES Collector" as ves
+end box
+
+box "Non-RT RIC" #LightPink
+    participant "Data File Collector" as dfc
+    participant "PM Data Converter" as pmdc
+    participant "PM Data Producer" as pmdp
+    participant "ES rApp" as rapp #LightCoral
+end box
+
+box "Near-RT RIC" #LightGreen
+    participant "NearRT RIC" as nearrt
+    participant "TS xApp" as xapp #LightCoral
+end box
+
+box Network #LightBlue
+  collections "O-DU O1" as ntsim_odu_1
+  collections "O-DU E2" as ransim_odu_1
+  collections "O-DU Sim" as odu
+end box
+
+loop
+    odu -> ntsim_odu_1: Generate PM file
+    ntsim_odu_1 -> ves: <<O1>> VES fileReady event
+    ves -> dfc: publish fileReady event
+    dfc -> pmdc: send PM Data
+    pmdc -> pmdp: send PM Data
+    pmdp -> rapp: send PM Data
+    alt decide cell to shut down
+        rapp -> rapp: Found cell [C] to\nswitch OFF
+        rapp -> nearrt: <<A1>> drain cell [C] before\nshutting down
+        nearrt -> xapp: drain cell [C]
+        xapp -> ransim_odu_1: <<E2>> Traffic Steering
+        ransim_odu_1 -> odu: drain cell [C]
+    else cell was drained
+        rapp -> rapp: Cell [C] was drained
+        rapp -> controller: Shut down selected cell OFF
+        controller -> ntsim_odu_1: <<O1>> Cell [C] OFF
+        ntsim_odu_1 -> odu: Change TX Power
+    else decide cell to start
+        rapp -> rapp: Found cell [C] to\nswitch ON
+        rapp -> controller: Start selected cell ON
+        controller -> ntsim_odu_1: <<O1>> Cell [C] ON
+        ntsim_odu_1 -> odu: Change TX Power
+    else no decision yet
+        rapp -> rapp: Keep monitoring
+    end
+end
+
+
+
+
+' End Diagram
+' Format
+right footer <img:https://opennetworking.org/wp-content/uploads/2020/12/ONF_NO-TAG_WITH-GRADIENT.png{scale=0.2}> \lCopyright 2023 Open Networking Foundation.\lThis work is licensed under a Creative Commons Attribution 4.0\l International License.\lSPDX-License-Identifier: CC-BY-4.0\n2023-09-06 | Thanks to PlantUML!
+
+skinparam backgroundColor #fefefe
+'skinparam handwritten true
+skinparam roundcorner 15
+
+@enduml
