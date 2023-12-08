@@ -65,15 +65,18 @@ fi
 ranpm_dir=$(pwd)
 if [ -f $RAN_O1_SIM_PATH_FILE ]; then
     o1_sim_path=$(cat $RAN_O1_SIM_PATH_FILE)
-    cd $o1_sim_path/ntsimulator 
+    cd $o1_sim_path/ntsimulator
 else
     echo "O1 Simulator path cannot be restored."
     is_path_valid=false
     while  [ $is_path_valid == false ]
     do
         read -p "Please enter a valid ABSOLUTE path to O1 Sim repository: " o1_sim_path 
-        cd $o1_sim_path/ntsimulator && is_path_valid=true
+        ls $o1_sim_path/ntsimulator && is_path_valid=true
     done
+
+    echo $o1_sim_path > $RAN_O1_SIM_PATH_FILE
+    cd $o1_sim_path/ntsimulator
 fi
 
 echo "Building image nts-ng-base"
@@ -117,7 +120,7 @@ if [ "$REPO" != "" ]; then
     echo "Tagging image"
     IMAGE=nts-ng-o-ran-du:$IMAGE_TAG
     NEW_IMAGE=$REPO/$IMAGE
-    docker tag nts-ng-o-ran-du $NEW_IMAGE
+    docker tag nts-ng-o-ran-du:1.8.1 $NEW_IMAGE
     if [ $? -ne 0 ]; then
         echo "RE-TAGGING FAILED"
         exit 1
