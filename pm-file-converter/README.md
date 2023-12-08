@@ -14,7 +14,7 @@ Build for docker or local kubernetes\
 `./build.sh no-push`
 
 Build for remote kubernetes - an externally accessible image repo (e.g. docker hub) is needed  \
-`./build.sh <external-image-repo>`
+`./build.sh <external-image-repo> [--tag <image-tag>]`
 
 ### Function
 
