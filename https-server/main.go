@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"encoding/csv"
 
 	log "github.com/sirupsen/logrus"
 
@@ -42,14 +43,20 @@ const https_port = 443
 
 const shared_files = "/files"
 const template_files = "/template-files"
+const scenario_files = "/scenario-files"
 
 const file_template = "pm-template.xml.gz"
+const scenario_file_template = "scenario-pm-template.xml.gz"
+const scenario_data_file = "demo_data.csv"
 
 var always_return_file = os.Getenv("ALWAYS_RETURN")
 var generated_files_start_time = os.Getenv("GENERATED_FILE_START_TIME")
 var generated_files_timezone = os.Getenv("GENERATED_FILE_TIMEZONE")
 
 var unzipped_template = ""
+
+var scenario_data [][]string
+var scenario_data_idx = 0
 
 // Get static file
 // Returned file is based on configuration
@@ -244,6 +251,145 @@ func generatedfiles(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 }
 
+
+func scenario(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// load scenario data on a first execution
+	if len(scenario_data) == 0 {
+
+		fn := scenario_files + "/" + scenario_data_file
+		f, err := os.Open(fn)
+		if err != nil {
+			log.Fatal("Unable to read input file " + fn, err)
+		}
+		defer f.Close()
+
+		csvReader := csv.NewReader(f)
+		_, err = csvReader.Read() // discard first line
+		if err != nil {
+			log.Fatal("Unable to parse file as CSV for " + fn, err)
+			return
+		}
+		scenario_data, err = csvReader.ReadAll()
+		if err != nil {
+			log.Fatal("Unable to parse file as CSV for " + fn, err)
+			return
+		}
+	}
+
+	vars := mux.Vars(req)
+
+	if id, ok := vars["fileid"]; ok {
+		if strings.HasPrefix(id, "NONEXISTING") {
+			w.WriteHeader(http.StatusNotFound)
+		}
+		log.Debug("Request scenario file:", id)
+		timezone := "+0000"
+		if generated_files_timezone != "" {
+			timezone = generated_files_timezone
+			log.Debug("Configured timezone: ", timezone)
+		} else {
+			log.Debug("Using default timezone: ", timezone)
+		}
+
+		fn := scenario_files + "/" + scenario_file_template
+		if unzipped_template == "" {
+
+			var buf3 bytes.Buffer
+			file, err := os.Open(fn)
+			if err != nil {
+				log.Error("PM template file", scenario_file_template, " does not exist")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			errb := gunzipReaderToWriter(&buf3, bufio.NewReader(file))
+			if errb != nil {
+				log.Error("Cannot gunzip file ", scenario_file_template, " - ", errb)
+				return
+			}
+
+			unzipped_template = string(buf3.Bytes())
+
+		}
+
+		//Parse file start date/time
+		//Example: 20230220.130505
+
+		layout := "20060102.150405"
+		ts := id[1:16]
+		tcur, err := time.Parse(layout, ts)
+		if err != nil {
+			log.Error("File start date/time cannot be parsed: ", ts)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		//begintime/endtime format: 2022-04-18T19:00:00+00:00
+		begintime := tcur.Format("2006-01-02T15:04:05") + timezone
+		d := time.Duration(1 * time.Second)
+		tend := tcur.Add(d)
+		endtime := tend.Format("2006-01-02T15:04:05") + timezone
+
+		//get counter values from scenario file - pmDlPrbUsage
+		ctr_value_1 := scenario_data[scenario_data_idx][0]
+		ctr_value_2 := scenario_data[scenario_data_idx][1]
+		scenario_data_idx++;
+		if scenario_data_idx >= len(scenario_data) {
+			scenario_data_idx = 0
+		}
+
+		//get counter values from ransim  - pmRrcConnectedUes
+		//dummy values for now
+		ctr_value_3 := "0"
+		ctr_value_4 := "8"
+
+		//Extract nodename
+		nodename := id[34:]
+		nodename = strings.Split(nodename, ".")[0]
+
+		template_string := strings.Clone(unzipped_template)
+
+		log.Debug("Replacing BEGINTIME with: ", begintime)
+		log.Debug("Replacing ENDTIME with: ", endtime)
+		log.Debug("Replacing CTR_VALUE_1 with: ", ctr_value_1)
+		log.Debug("Replacing CTR_VALUE_2 with: ", ctr_value_2)
+		log.Debug("Replacing CTR_VALUE_3 with: ", ctr_value_3)
+		log.Debug("Replacing CTR_VALUE_4 with: ", ctr_value_4)
+		log.Debug("Replacing NODE_NAME with: ", nodename)
+
+		template_string = strings.Replace(template_string, "BEGINTIME", begintime, -1)
+		template_string = strings.Replace(template_string, "ENDTIME", endtime, -1)
+
+		template_string = strings.Replace(template_string, "CTR_VALUE_1", ctr_value_1, -1)
+		template_string = strings.Replace(template_string, "CTR_VALUE_2", ctr_value_2, -1)
+		template_string = strings.Replace(template_string, "CTR_VALUE_3", ctr_value_3, -1)
+		template_string = strings.Replace(template_string, "CTR_VALUE_4", ctr_value_4, -1)
+
+		template_string = strings.Replace(template_string, "NODE_NAME", nodename, -1)
+
+		b := []byte(template_string)
+		var buf bytes.Buffer
+		err = gzipWrite(&buf, &b)
+		if err != nil {
+			log.Error("Cannot gzip file ", id, " - ", err)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Write(buf.Bytes())
+
+		log.Info("File retrieval scenario file: ", fn, "as ", id)
+		return
+	}
+
+	w.WriteHeader(http.StatusNotFound)
+}
+
 // Simple alive check
 func alive(w http.ResponseWriter, req *http.Request) {
 	//Alive check
@@ -252,14 +398,15 @@ func alive(w http.ResponseWriter, req *http.Request) {
 // == Main ==//
 func main() {
 
-	log.SetLevel(log.InfoLevel)
-	//log.SetLevel(log.TraceLevel)
+	//log.SetLevel(log.InfoLevel)
+	log.SetLevel(log.TraceLevel)
 
 	log.Info("Server starting...")
 
 	rtr := mux.NewRouter()
 	rtr.HandleFunc("/files/{fileid}", files)
 	rtr.HandleFunc("/generatedfiles/{fileid}", generatedfiles)
+	rtr.HandleFunc("/scenario/{fileid}", scenario)
 	rtr.HandleFunc("/", alive)
 
 	rtr.HandleFunc("/custom_debug_path/profile", pprof.Profile)

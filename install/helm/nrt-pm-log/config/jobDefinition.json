@@ -9,7 +9,8 @@
             {
                "measuredObjClass": "NRCellDU",
                "measTypes": [
-                  "pmCounterNumber101"
+                  "pmCellPrbTotDl",
+                  "pmRrcConnectedUes"
                ]
             }
          ],
