@@ -19,7 +19,7 @@
 
 
 
-echo "Installing pmrapp"
+echo "Installing rApps"
 
 . scripts/kube_get_controlplane_host.sh
 . scripts/kube_get_nodeport.sh
@@ -57,10 +57,10 @@ check_error $?
 
 export PMRAPP_CLIENT_SECRET=$(< .sec_nonrtric-realm_$cid)
 
-envsubst < helm/nrt-pm-rapp/values-template.yaml > helm/nrt-pm-rapp/values.yaml
+envsubst < helm/nrt-rapps/values-template.yaml > helm/nrt-rapps/values.yaml
 
 echo " helm install..."
-helm install --wait -f helm/global-values.yaml -n nonrtric nrt-pm-rapp helm/nrt-pm-rapp
+helm install --wait -f helm/global-values.yaml -n nonrtric nrt-rapps helm/nrt-rapps
 
 echo "done"
 

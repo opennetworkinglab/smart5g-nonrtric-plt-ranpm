@@ -801,6 +801,12 @@ func read_kafka_messages() {
 					log.Warning("Received msg not json?")
 				} else {
 					fmt.Println(buf.String())
+
+					reportAbsPath := fmt.Sprintf("/output/prb_usage_reports/report_%d.json", msg_count)
+					err := os.WriteFile(reportAbsPath, buf.Bytes(), 0666)
+					if err != nil {
+						log.Warning("Cannot write output to a file")
+					}
 					msg_count++
 					fmt.Println("Number of received json msgs: " + strconv.Itoa(msg_count))
 				}

@@ -1,7 +1,5 @@
-#!/bin/bash
-
 #  ============LICENSE_START===============================================
-#  Copyright (C) 2023 Nordix Foundation. All rights reserved.
+#  Copyright (C) 2023 Tietoevry. All rights reserved.
 #  ========================================================================
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -15,10 +13,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #  ============LICENSE_END=================================================
+#
 
-echo "Uninstalling pmrapp"
+FROM python:3.10.12-slim
 
-echo " helm uninstall..."
-helm uninstall -n nonrtric nrt-pm-rapp
+WORKDIR /app
 
-echo "done"
+COPY requirements.txt .
+RUN pip install -r /app/requirements.txt
+
+COPY main.py .
+
+ENTRYPOINT ["python", "main.py"]
