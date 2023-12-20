@@ -65,6 +65,14 @@ if [ $? -ne 0 ]; then
 else
     echo "  OK"
 fi
+echo " Checking if keytool is installed"
+tmp=$(type keytool)
+if [ $? -ne 0 ]; then
+	echo "  Command utility keytool (a key and certificate management utility) is not installed"
+	exit 1
+else
+    echo "  OK"
+fi
 
 echo "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 echo "Restarting istiod, workaround to refresh jwks cache"
