@@ -4,7 +4,14 @@
     "type": "message_router",
     "dmaap_info": {
       "location": "mtl5",
-      "topic_url": "http://message-router.nonrtric:3904/events/file-ready/",
+      "topic_url": "http://message-router.nonrtric:3904/events/file-ready/"
+    }
+  },
+  "ves-rapp": {
+    "type": "message_router",
+    "dmaap_info": {
+      "location": "mtl5",
+      "topic_url": "http://message-router.nonrtric:3904/events/rapp-topic"
     }
   }
 }
