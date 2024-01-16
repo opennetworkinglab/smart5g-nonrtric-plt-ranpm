@@ -10,10 +10,9 @@
          "measObjInstIds": [],
          "measTypeSpecs": [
             {
-               "measuredObjClass": "NRCellDU",
+               "measuredObjClass": "S1/B13/C1",
                "measTypes": [
-                  "pmCellPrbTotDl",
-                  "pmRrcConnectedUes"
+                 "RRU.PrbTotDl"
                ]
             }
          ],

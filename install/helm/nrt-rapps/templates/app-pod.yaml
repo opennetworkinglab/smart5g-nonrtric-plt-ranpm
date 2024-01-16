@@ -78,17 +78,17 @@ spec:
     {{- end }}
     env:
     - name: SDN_CONTROLLER_ADDRESS
-      value: "controller.nonrtric"
+      value: "172.17.0.1"
     - name: SDN_CONTROLLER_PORT
-      value: "8181"
+      value: "80"
     - name: SDN_CONTROLLER_USERNAME
-      value: "admin"
+      value: "root"
     - name: SDN_CONTROLLER_PASSWORD
-      value: "Kp8bJ4SXszM0WXlhak3eHlcse2gAw84vaoGGmJvUy2U"
+      value: "viavi"
     - name: A1T_ADDRESS
-      value: "onos-a1t.riab"
+      value: "172.17.0.1"
     - name: A1T_PORT
-      value: "9639"
+      value: "80"
     - name: RANSIM_DATA_PATH
       value: /input/prb_usage_reports
     volumeMounts:
