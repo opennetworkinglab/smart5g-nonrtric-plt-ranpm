@@ -89,6 +89,12 @@ spec:
       value: "172.17.0.1"
     - name: A1T_PORT
       value: "80"
+    - name: LOAD_PREDICTOR
+      value: "dummy"
+    - name: LOAD_PREDICTOR_PORT
+      value: "dummy"
+    - name: LOAD_PREDICTOR_API
+      value: "retrain"
     - name: RANSIM_DATA_PATH
       value: /input/prb_usage_reports
     volumeMounts:
