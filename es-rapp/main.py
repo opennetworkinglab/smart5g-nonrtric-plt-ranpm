@@ -101,10 +101,7 @@ class Application:
             log.error('Unable to connect to A1.')
             return
 
-        for policy in policies:
-            # assumed that all policies with ID >= 1000 are from this rApp
-            if int(policy) >= 1000:
-                self.delete_policy(policy)
+        self.delete_policy()
 
         self.fetch_cell_urls()
         if not self.cell_urls:
@@ -253,53 +250,16 @@ class Application:
         path_tail = self.cell_urls[cell_id]
         url = 'http://' + self.sdn_controller_address + ':' + self.sdn_controller_port + path_base + path_tail
         payload = { "attributes": {"administrativeState": "LOCKED" if locked else "UNLOCKED"} }
-        response = requests.put(url, verify=False, auth=self.sdn_controller_auth, json=payload)
+        response = requests.put(url, auth=self.sdn_controller_auth, json=payload)
         log.info(f'Cell-{sOff} response status:{response.status_code}')
 
-    def enable_one_cell(self):
-        options = []
-        for key in self.cells.keys():
-            option = [None] * 3
-            option[0] = self.cells[key]['id']
-            option[1] = self.cells[key]['avg_prb_usage']
-            option[2] = (self.cells[key]['state'] == States.DISABLED)
-            options.append(option)
-
-        options_filtered = [option for option in options if option[2] == True]
-        if len(options_filtered) == 0:
-            log.info('There are no cells that could be enabled...')
-            return
-
-        cell_id = random.choice(options_filtered)[0]
-        self.cells[cell_id]['state'] = States.ENABLED
-        self.toggle_cell_administrative_state(cell_id, locked=False)
-        self.send_command_enable_cell(cell_id)
-
+    
     def send_command_enable_cell(self, cell_id):
         log.info(f'Enabling cell with id {cell_id}')
-        for policy in self.cells[cell_id]['policy_list']:
-            self.delete_policy(str(policy))
+        self.delete_policy()
         self.cells[cell_id]['policy_list'] = []
 
-    def disable_one_cell(self):
-        options = []
-        for key in self.cells.keys():
-            option = [None] * 3
-            option[0] = self.cells[key]['id']
-            option[1] = self.cells[key]['avg_prb_usage']
-            option[2] = (self.cells[key]['state'] == States.ENABLED)
-            options.append(option)
-
-        options_filtered = [option for option in options if option[2] == True]
-        if len(options_filtered) == 0:
-            log.info('There are no cells that could be disabled...')
-            return
-
-        ind = sorted(options_filtered, key=itemgetter(1))[0]
-        cell_id = ind[0]
-        self.cells[cell_id]['state'] = States.DISABLING
-        self.send_command_disable_cell(cell_id)
-
+    
     def send_command_disable_cell(self, cell_id):
         log.info(f'Disabling cell with id {cell_id}')
         current_policies = self.get_policies()
@@ -330,7 +290,9 @@ class Application:
         log.info(f'Deleting policy with id: {policy_id}')
         try:
             requests.delete(self.a1_url +
-                            '/A1-P/v2/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/' + policy_id)
+                            '/A1-P/v2/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/1000')
+            requests.delete(self.a1_url +
+                            '/A1-P/v2/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/1001')
         except Exception as ex:
             log.error(ex)
 
