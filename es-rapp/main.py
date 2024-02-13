@@ -1,5 +1,6 @@
 #  ============LICENSE_START===============================================
-#  Copyright (C) 2023 Rimedo Labs and Tietoevry. All rights reserved.
+#  Copyright (C) 2024 Intel, Rimedo Labs and Tietoevry. All rights reserved.
+#  SPDX-License-Identifier: Apache-2.0
 #  ========================================================================
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -13,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #  ============LICENSE_END=================================================
-#
+#  !/usr/bin/env python3
 
 import numpy as np
 import requests
@@ -83,23 +84,25 @@ class Application:
         self.source_name = ""
         self.meas_entity_dist_name = ""
 
+        self.prb_history = []
+        self.switch_off = False
+        self.index = 0
+        self.load_predictor = 'http://' + os.environ['LOAD_PREDICTOR'] + ':' + os.environ['LOAD_PREDICTOR_PORT'] + '/' + os.environ['LOAD_PREDICTOR_API']
+
         self.a1_url = 'http://' + os.environ['A1T_ADDRESS'] + ':' + os.environ['A1T_PORT']
         self.ransim_data_path = os.environ['RANSIM_DATA_PATH']
 
         self.sdn_controller_address = os.environ['SDN_CONTROLLER_ADDRESS']
         self.sdn_controller_port = os.environ['SDN_CONTROLLER_PORT']
         self.sdn_controller_auth = (os.environ['SDN_CONTROLLER_USERNAME'], os.environ['SDN_CONTROLLER_PASSWORD'])
-
+        
     def work(self):
         policies = self.get_policies()
         if policies is None:
             log.error('Unable to connect to A1.')
             return
 
-        for policy in policies:
-            # assumed that all policies with ID >= 1000 are from this rApp
-            if int(policy) >= 1000:
-                self.delete_policy(policy)
+        self.delete_policy()
 
         self.fetch_cell_urls()
         if not self.cell_urls:
@@ -189,6 +192,12 @@ class Application:
         status = status[:-2] + "] avg: "
         avg_prb = sum(self.cells[cell]["avg_prb_usage"] for cell in self.cells) / sum((self.cells[cell]['state'] != States.DISABLED) for cell in self.cells)
         status += f'{avg_prb:.3f}'
+        # Maintain history of the prb usage. This is used for querying the model.
+        if not np.isnan(avg_prb):
+            self.prb_history.append(int(avg_prb))
+            log.info(f'New Value {(avg_prb)}')
+        else:
+            self.prb_history.append(40)
         energy_all = (300 + 4 * 150) / 1e3
         energy = (300 + (sum((self.cells[cell]['state'] != States.DISABLED) for cell in self.cells) - 1) * 150) / 1e3
         energy_per_day = 24 * energy
@@ -196,44 +205,44 @@ class Application:
         status += f' (energy consumption: {energy:.2f}/{energy_all:.2f} W; per day: {energy_per_day:.2f} Wh; per day savings: {energy_save:.2f} Wh)'
         log.info(status)
 
-    def make_decision(self):
-        data = []
-        for i, key in enumerate(self.cells.keys()):
-            record = [None] * 3
-            record[0] = self.cells[key]['id']
-            record[1] = self.cells[key]['avg_prb_usage']
-            record[2] = self.cells[key]['state']
-            data.append(record)
-
-        if any(np.nan in record for record in data):
+    def make_decision(self) :
+        if len(self.prb_history) < 10:
+            log.error("Insufficient data to make a prediction")
             return
 
-        total_prb_usage = sum(record[1] for record in data)
-        enabled_cells = sum((record[2] != States.DISABLED) for record in data)
-        disabling_cell = sum((record[2] == States.DISABLING) for record in data)
+        headers = {'Content-Type': 'application/json', 'Accept':'application/json'}
+        l1 = self.prb_history[:]
+        l1.append(self.index%144)
+        self.index = self.index + 1
+        l1.append(0)
+        l = json.dumps(l1)
+        rsp = requests.post(self.load_predictor, headers= headers, json=l)
+        r1 = rsp.json()
+        log.info(f'Query - {l1}')
+        prd = 0
+        i = 0
+        self.prb_history = self.prb_history[5:]
+        # Convert the prediction from string to int
+        while True: 
+            if r1[0][i] == " " or r1[0][i] == "." :
+                break
+            prd = prd*10 + int(r1[0][i])
+            i = i+1
 
-        log.info(f'Checking if a cell should be switched off')
-        for record in data:
-            if record[1] == 0 and (record[2] == States.DISABLING):
-                cell_id = record[0]
-                self.toggle_cell_administrative_state(cell_id, locked=True)
-                self.cells[cell_id]['state'] = States.DISABLED
-                enabled_cells-=1
-
-        current_avg_prb_usage = total_prb_usage / enabled_cells
-
-        log.info(f'Making decision...')
-        log.info(f'Current average PRB usage: {current_avg_prb_usage}')
-        if (max(record[1] for record in data) > 40) and (current_avg_prb_usage > 30):
-            log.info('Max and average PRB usage above thresholds - trying to enable one cell.')
-            self.enable_one_cell()
-        elif (current_avg_prb_usage < 20) and (disabling_cell == 0):
-            log.info('Average PRB usage below threshold - trying to disable one cell.')
-            future_avg_prb_usage = total_prb_usage / (enabled_cells - 1)
-            log.info(f'Expected PRB usage {future_avg_prb_usage}.')
-            self.disable_one_cell()
-        else:
-            log.info('Make cell on/off decision - no action - balance achieved.')
+        log.info(f'Predicted load - {prd}')
+        # Hardcoding the cell-id here.
+        cell_id = "1454c001"
+        if prd < 80 and self.switch_off == False:
+            #Switch off capacity cell
+            self.cells[cell_id]['state'] = States.DISABLING
+            self.send_command_disable_cell(cell_id)
+            self.switch_off = True
+        elif prd > 80 and self.switch_off == True:
+            #Switch On capacity cell
+            self.cells[cell_id]['state'] = States.ENABLED
+            self.toggle_cell_administrative_state(cell_id, locked=False)
+            self.send_command_enable_cell(cell_id)
+            self.switch_off = False
 
     def toggle_cell_administrative_state(self, cell_id, locked):
         sOff='off' if locked else 'on'
@@ -242,53 +251,16 @@ class Application:
         path_tail = self.cell_urls[cell_id]
         url = 'http://' + self.sdn_controller_address + ':' + self.sdn_controller_port + path_base + path_tail
         payload = { "attributes": {"administrativeState": "LOCKED" if locked else "UNLOCKED"} }
-        response = requests.put(url, verify=False, auth=self.sdn_controller_auth, json=payload)
+        response = requests.put(url, auth=self.sdn_controller_auth, json=payload)
         log.info(f'Cell-{sOff} response status:{response.status_code}')
 
-    def enable_one_cell(self):
-        options = []
-        for key in self.cells.keys():
-            option = [None] * 3
-            option[0] = self.cells[key]['id']
-            option[1] = self.cells[key]['avg_prb_usage']
-            option[2] = (self.cells[key]['state'] == States.DISABLED)
-            options.append(option)
-
-        options_filtered = [option for option in options if option[2] == True]
-        if len(options_filtered) == 0:
-            log.info('There are no cells that could be enabled...')
-            return
-
-        cell_id = random.choice(options_filtered)[0]
-        self.cells[cell_id]['state'] = States.ENABLED
-        self.toggle_cell_administrative_state(cell_id, locked=False)
-        self.send_command_enable_cell(cell_id)
-
+    
     def send_command_enable_cell(self, cell_id):
         log.info(f'Enabling cell with id {cell_id}')
-        for policy in self.cells[cell_id]['policy_list']:
-            self.delete_policy(str(policy))
+        self.delete_policy()
         self.cells[cell_id]['policy_list'] = []
 
-    def disable_one_cell(self):
-        options = []
-        for key in self.cells.keys():
-            option = [None] * 3
-            option[0] = self.cells[key]['id']
-            option[1] = self.cells[key]['avg_prb_usage']
-            option[2] = (self.cells[key]['state'] == States.ENABLED)
-            options.append(option)
-
-        options_filtered = [option for option in options if option[2] == True]
-        if len(options_filtered) == 0:
-            log.info('There are no cells that could be disabled...')
-            return
-
-        ind = sorted(options_filtered, key=itemgetter(1))[0]
-        cell_id = ind[0]
-        self.cells[cell_id]['state'] = States.DISABLING
-        self.send_command_disable_cell(cell_id)
-
+    
     def send_command_disable_cell(self, cell_id):
         log.info(f'Disabling cell with id {cell_id}')
         current_policies = self.get_policies()
@@ -319,7 +291,9 @@ class Application:
         log.info(f'Deleting policy with id: {policy_id}')
         try:
             requests.delete(self.a1_url +
-                            '/A1-P/v2/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/' + policy_id)
+                            '/A1-P/v2/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/1000')
+            requests.delete(self.a1_url +
+                            '/A1-P/v2/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/1001')
         except Exception as ex:
             log.error(ex)
 
