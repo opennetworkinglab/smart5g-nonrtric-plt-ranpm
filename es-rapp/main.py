@@ -1,5 +1,6 @@
 #  ============LICENSE_START===============================================
-#  Copyright (C) 2023 Intel, Rimedo Labs and Tietoevry. All rights reserved.
+#  Copyright (C) 2024 Intel, Rimedo Labs and Tietoevry. All rights reserved.
+#  SPDX-License-Identifier: Apache-2.0
 #  ========================================================================
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -13,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #  ============LICENSE_END=================================================
-#
+#  !/usr/bin/env python3
 
 import numpy as np
 import requests
