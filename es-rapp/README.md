@@ -28,6 +28,12 @@ The container expects the following environment variables:
 
 - RANSIM_DATA_PATH : Path where input PM reports are stored
 
+- LOAD_PREDICTOR : Address of the Load Predictor model
+
+- LOAD_PREDICTOR_PORT : Port number of the Load Predictor model
+
+- LOAD_PREDICTOR_API : API dedicated for inference.
+
 
 The rApp tries to connect to SDN-C and A1T in init phase and exits if its not possible.
 
