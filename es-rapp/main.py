@@ -287,7 +287,7 @@ class Application:
         log.info(f'Sending policy (id={index}) for cell with id {cell_id} (FORBID): status_code: {response.status_code}')
         self.cells[cell_id]['policy_list'].append(index)
 
-    def delete_policy(self, policy_id: str):
+    def delete_policy(self):
         log.info(f'Deleting policy with id: {policy_id}')
         try:
             requests.delete(self.a1_url +

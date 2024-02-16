@@ -94,7 +94,7 @@ spec:
     - name: LOAD_PREDICTOR_PORT
       value: "dummy"
     - name: LOAD_PREDICTOR_API
-      value: "retrain"
+      value: "predict"
     - name: RANSIM_DATA_PATH
       value: /input/prb_usage_reports
     volumeMounts:
