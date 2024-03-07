@@ -27,6 +27,8 @@ from enum import Enum
 
 NCI_LENGTH = 36
 
+CANDIDATE_CELL_IDS = [0,1]
+
 def get_example_per_slice_policy(nci: int, mcc: str, mnc: str, qos: int, preference: str):
     ## hardcoded values used for SMaRT-5G demo
     return {
@@ -86,6 +88,11 @@ class Application:
         self.source_name = ""
         self.meas_entity_dist_name = ""
 
+        self.prb_history = []
+        self.switch_off = False
+        self.index = 0
+        self.load_predictor = 'http://' + os.environ['LOAD_PREDICTOR'] + ':' + os.environ['LOAD_PREDICTOR_PORT'] + '/' + os.environ['LOAD_PREDICTOR_API']
+
         self.a1_url = 'http://' + os.environ['A1T_ADDRESS'] + ':' + os.environ['A1T_PORT']
         self.ransim_data_path = os.environ['RANSIM_DATA_PATH']
 
@@ -109,16 +116,11 @@ class Application:
             log.error('Unable to fetch cell URLs')
             return
 
-        log_freq = 0
         while True:
             time.sleep(self.sleep_time_sec)
 
             data = self.read_data()
             if not data:
-                log_freq += 1
-                if log_freq > 60:
-                    log.info('No data')
-                    log_freq = 0
                 continue
 
             self.update_local_data(data)
@@ -190,20 +192,37 @@ class Application:
                 store['avg_prb_usage'] = np.mean(store['prb_usage'])
 
         status = "PRB usage: ["
-        for key in self.cells.keys():
+        sum_of_prb_usage = 0
+        for i, key in enumerate(self.cells.keys()):
             cell = self.cells[key]
-            status += f'{cell["id"]}: {cell["avg_prb_usage"]:.3f}, '
+            avg_prb_usage = cell["avg_prb_usage"]
+
+            if i in CANDIDATE_CELL_IDS and not np.isnan(avg_prb_usage):
+                sum_of_prb_usage += avg_prb_usage
+
+            status += f'{cell["id"]}: {avg_prb_usage:.3f}, '
+
+        self.prb_history.append(int(sum_of_prb_usage))
+
         status = status[:-2] + "] avg: "
         avg_prb = sum(self.cells[cell]["avg_prb_usage"] for cell in self.cells) / sum((self.cells[cell]['state'] != States.DISABLED) for cell in self.cells)
         status += f'{avg_prb:.3f}'
+
+        status += f', [candidate cells sum of prb usage]: {sum_of_prb_usage:.3f}'
+
         energy_all = (300 + 4 * 150) / 1e3
         energy = (300 + (sum((self.cells[cell]['state'] != States.DISABLED) for cell in self.cells) - 1) * 150) / 1e3
         energy_per_day = 24 * energy
         energy_save = (energy_all - energy) * 24
-        status += f' (energy consumption: {energy:.2f}/{energy_all:.2f} W; per day: {energy_per_day:.2f} Wh; per day savings: {energy_save:.2f} Wh)'
+        status += f', (energy consumption: {energy:.2f}/{energy_all:.2f} W; per day: {energy_per_day:.2f} Wh; per day savings: {energy_save:.2f} Wh)'
         log.info(status)
 
     def make_decision(self):
+        if len(self.prb_history) < 10:
+            log.error("Insufficient data to make a prediction")
+            log.info(f'prb_history = {self.prb_history}')
+            return
+
         data = []
         for i, key in enumerate(self.cells.keys()):
             record = [None] * 3

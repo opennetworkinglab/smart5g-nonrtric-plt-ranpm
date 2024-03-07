@@ -91,6 +91,12 @@ spec:
       value: "9639"
     - name: RANSIM_DATA_PATH
       value: /input/prb_usage_reports
+    - name: LOAD_PREDICTOR
+      value: "0.0.0.0"
+    - name: LOAD_PREDICTOR_PORT
+      value: "666"
+    - name: LOAD_PREDICTOR_API
+      value: "predict"
     volumeMounts:
     - mountPath: /input/prb_usage_reports
       name: shared-data
