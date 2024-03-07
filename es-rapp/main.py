@@ -319,15 +319,15 @@ class Application:
         log.info(f'Sending policy (id={index}) for cell {cell_id} [nci={nci}, mcc={mcc}, mnc={mnc}] (FORBID): status_code: {response.status_code}')
         self.cells[cell_id]['policy_list'].append(index)
 
-        index += 1
-        while str(index) in current_policies:
-            index += 1
-        response = requests.put(self.a1_url +
-                                '/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/'
-                                + str(index), params=dict(notification_destination='test'),
-                                json=get_example_per_slice_policy(nci, mcc, mnc, qos=2, preference='FORBID'))
-        log.info(f'Sending policy (id={index}) for cell {cell_id} [nci={nci}, mcc={mcc}, mnc={mnc}] (FORBID): status_code: {response.status_code}')
-        self.cells[cell_id]['policy_list'].append(index)
+        # index += 1
+        # while str(index) in current_policies:
+        #     index += 1
+        # response = requests.put(self.a1_url +
+        #                         '/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/'
+        #                         + str(index), params=dict(notification_destination='test'),
+        #                         json=get_example_per_slice_policy(nci, mcc, mnc, qos=2, preference='FORBID'))
+        # log.info(f'Sending policy (id={index}) for cell {cell_id} [nci={nci}, mcc={mcc}, mnc={mnc}] (FORBID): status_code: {response.status_code}')
+        # self.cells[cell_id]['policy_list'].append(index)
 
     def delete_policy(self, policy_id: str):
         log.info(f'Deleting policy with id: {policy_id}')
