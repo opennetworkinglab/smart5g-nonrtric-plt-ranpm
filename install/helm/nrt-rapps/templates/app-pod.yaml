@@ -86,9 +86,9 @@ spec:
     - name: SDN_CONTROLLER_PASSWORD
       value: "viavi"
     - name: A1T_ADDRESS
-      value: "172.17.0.1"
+      value: "onos-a1t.riab"
     - name: A1T_PORT
-      value: "80"
+      value: "9639"
     - name: RANSIM_DATA_PATH
       value: /input/prb_usage_reports
     volumeMounts:

@@ -25,16 +25,18 @@ import os
 from operator import itemgetter
 from enum import Enum
 
-def get_example_per_slice_policy(cell_id: str, qos: int, preference: str):
+NCI_LENGTH = 36
+
+def get_example_per_slice_policy(nci: int, mcc: str, mnc: str, qos: int, preference: str):
     ## hardcoded values used for SMaRT-5G demo
     return {
         "scope": {
             "sliceId": {
                 "sst": 1,
-                "sd": "000000",
+                "sd": "456DEF",
                 "plmnId": {
-                    "mcc": "001",
-                    "mnc": "01"
+                    "mcc": mcc,
+                    "mnc": mnc
                 }
             },
             "qosId": {
@@ -46,11 +48,11 @@ def get_example_per_slice_policy(cell_id: str, qos: int, preference: str):
                 "cellIdList": [
                     {
                         "plmnId": {
-                            "mcc": "001",
-                            "mnc": "01"
+                            "mcc": mcc,
+                            "mnc": mnc
                         },
                         "cId": {
-                            "ncI": 268783936
+                            "ncI": nci
                         }
                     }
                 ],
@@ -79,6 +81,7 @@ class Application:
 
         self.cells = {}
         self.cell_urls = {}
+        self.policyVariables = {}
         self.ready_time = time.time() + sleep_after_decision_sec
         self.source_name = ""
         self.meas_entity_dist_name = ""
@@ -101,17 +104,21 @@ class Application:
             if int(policy) >= 1000:
                 self.delete_policy(policy)
 
-        self.fetch_cell_urls()
+        self.init()
         if not self.cell_urls:
             log.error('Unable to fetch cell URLs')
             return
 
+        log_freq = 0
         while True:
             time.sleep(self.sleep_time_sec)
 
             data = self.read_data()
             if not data:
-                log.info('No data')
+                log_freq += 1
+                if log_freq > 60:
+                    log.info('No data')
+                    log_freq = 0
                 continue
 
             self.update_local_data(data)
@@ -219,6 +226,9 @@ class Application:
                 self.toggle_cell_administrative_state(cell_id, locked=True)
                 self.cells[cell_id]['state'] = States.DISABLED
                 enabled_cells-=1
+                # Because report arrives once per 60s, skip making decision
+                # to avoid OFF->ON in the same time frame.
+                return
 
         current_avg_prb_usage = total_prb_usage / enabled_cells
 
@@ -265,7 +275,7 @@ class Application:
         self.send_command_enable_cell(cell_id)
 
     def send_command_enable_cell(self, cell_id):
-        log.info(f'Enabling cell with id {cell_id}')
+        log.info(f'Enabling cell {cell_id}')
         for policy in self.cells[cell_id]['policy_list']:
             self.delete_policy(str(policy))
         self.cells[cell_id]['policy_list'] = []
@@ -290,61 +300,91 @@ class Application:
         self.send_command_disable_cell(cell_id)
 
     def send_command_disable_cell(self, cell_id):
-        log.info(f'Disabling cell with id {cell_id}')
+        cellLocalId = self.policyVariables[cell_id]['cellLocalId']
+        mcc = self.policyVariables[cell_id]['mcc']
+        mnc = self.policyVariables[cell_id]['mnc']
+        nci = self.calculate_nci(self.policyVariables['gnbId'], NCI_LENGTH, self.policyVariables['gnbIdLength'], cellLocalId)
+        log.info(f'Disabling cell {cell_id} [cellLocalId={cellLocalId}, nci={nci}, mcc={mcc}, mnc={mnc}]')
         current_policies = self.get_policies()
 
         index = 1000
         while str(index) in current_policies:
             index += 1
 
-        # put new policy with AVOID based on scope
+        # put new policy with FORBID based on scope
         response = requests.put(self.a1_url +
-                                '/A1-P/v2/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/'
+                                '/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/'
                                 + str(index), params=dict(notification_destination='test'),
-                                json=get_example_per_slice_policy(cell_id, qos=1, preference='FORBID'))
-        log.info(f'Sending policy (id={index}) for cell with id {cell_id} (FORBID): status_code: {response.status_code}')
+                                json=get_example_per_slice_policy(nci, mcc, mnc, qos=1, preference='FORBID'))
+        log.info(f'Sending policy (id={index}) for cell {cell_id} [nci={nci}, mcc={mcc}, mnc={mnc}] (FORBID): status_code: {response.status_code}')
         self.cells[cell_id]['policy_list'].append(index)
 
         index += 1
         while str(index) in current_policies:
             index += 1
         response = requests.put(self.a1_url +
-                                '/A1-P/v2/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/'
+                                '/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/'
                                 + str(index), params=dict(notification_destination='test'),
-                                json=get_example_per_slice_policy(cell_id, qos=2, preference='FORBID'))
-        log.info(f'Sending policy (id={index}) for cell with id {cell_id} (FORBID): status_code: {response.status_code}')
+                                json=get_example_per_slice_policy(nci, mcc, mnc, qos=2, preference='FORBID'))
+        log.info(f'Sending policy (id={index}) for cell {cell_id} [nci={nci}, mcc={mcc}, mnc={mnc}] (FORBID): status_code: {response.status_code}')
         self.cells[cell_id]['policy_list'].append(index)
 
     def delete_policy(self, policy_id: str):
         log.info(f'Deleting policy with id: {policy_id}')
         try:
             requests.delete(self.a1_url +
-                            '/A1-P/v2/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/' + policy_id)
+                            '/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/' + policy_id)
         except Exception as ex:
             log.error(ex)
 
     def get_policies(self):
         try:
             response = requests.get(self.a1_url +
-                                    '/A1-P/v2/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies').json()
+                                    '/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies').json()
             return response
         except Exception as ex:
             log.error(ex)
             return None
 
-    def fetch_cell_urls(self):
-        ## TBUpdated: fetch managedelement id instead of hardcoded value
-        path_base = '/O1/CM/ManagedElement=1193046'
+    def _getIdOfManagedElement(self):
+        path_base = '/O1/CM/ManagedElement'
+        url = 'http://' + self.sdn_controller_address + ':' + self.sdn_controller_port + path_base
+        try:
+            response = requests.get(url, auth=self.sdn_controller_auth).json()
+            id = response[0]["id"]
+            log.info(f'GET O1/CM/ManagedElement -> id = {id}')
+            return id
+        except Exception as ex:
+            log.error(ex)
+            return None
+
+    def calculate_nci(self, gnbId: str, nciLength: int, gnbIdLength: int, cellId: int):
+        return (int(gnbId) << (nciLength - gnbIdLength)) | cellId
+
+    def init(self):
+        id = self._getIdOfManagedElement()
+        path_base = f'/O1/CM/ManagedElement={id}'
         url = 'http://' + self.sdn_controller_address + ':' + self.sdn_controller_port + path_base
         try:
             response = requests.get(url, auth=self.sdn_controller_auth).json()
             gnb_du_function = response['GnbDuFunction']
+
+            # Assumption - all below values are same across GnbDuFunctions
+            self.policyVariables['gnbId'] = gnb_du_function[0]['attributes']['gnbId']
+            self.policyVariables['gnbIdLength'] = gnb_du_function[0]['attributes']['gnbIdLength']
 
             for data in gnb_du_function:
                 for cell_du in data['NrCellDu']:
                     cell_name = cell_du['viavi-attributes']['cellName']
                     url = cell_du['objectInstance']
                     self.cell_urls[cell_name] = url
+
+                    self.policyVariables[cell_name] = {}
+                    self.policyVariables[cell_name]['cellLocalId'] = cell_du['attributes']['cellLocalId']
+
+                    # Assumption - plmnInfoList has only 1 element
+                    self.policyVariables[cell_name]['mcc'] = cell_du['attributes']['plmnInfoList'][0]['plmnId']['mcc']
+                    self.policyVariables[cell_name]['mnc'] = cell_du['attributes']['plmnInfoList'][0]['plmnId']['mnc']
 
             return response
         except Exception as ex:
@@ -354,8 +394,8 @@ class Application:
 
 if __name__ == '__main__':
     app = Application(
-        sleep_time_sec=10.0,
-        sleep_after_decision_sec=120.0,
-        avg_slots=5
+        sleep_time_sec=1.0,
+        sleep_after_decision_sec=10.0,
+        avg_slots=1
     )
     app.work()
