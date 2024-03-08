@@ -92,9 +92,9 @@ spec:
     - name: RANSIM_DATA_PATH
       value: /input/prb_usage_reports
     - name: LOAD_PREDICTOR
-      value: "0.0.0.0"
+      value: "172.20.14.129"
     - name: LOAD_PREDICTOR_PORT
-      value: "666"
+      value: "9008"
     - name: LOAD_PREDICTOR_API
       value: "predict"
     volumeMounts:

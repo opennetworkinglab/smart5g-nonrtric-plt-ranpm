@@ -76,20 +76,18 @@ class States(Enum):
     DISABLING = 3
 
 class Application:
-    def __init__(self, sleep_time_sec: float, sleep_after_decision_sec: float, slots: int):
+    def __init__(self, sleep_time_sec: float, slots: int):
         self.sleep_time_sec = sleep_time_sec
-        self.sleep_after_decision_sec = sleep_after_decision_sec
         self.slots = slots
 
         self.cells = {}
         self.cell_urls = {}
         self.policyVariables = {}
-        self.ready_time = time.time() + sleep_after_decision_sec
         self.source_name = ""
         self.meas_entity_dist_name = ""
 
         self.prb_history = []
-        self.switch_off = False
+        self.switched_off = False
         self.index = 0
         self.load_predictor = 'http://' + os.environ['LOAD_PREDICTOR'] + ':' + os.environ['LOAD_PREDICTOR_PORT'] + '/' + os.environ['LOAD_PREDICTOR_API']
 
@@ -123,10 +121,7 @@ class Application:
             if not data:
                 continue
 
-            self.update_local_data(data)
-
-            if time.time() >= self.ready_time:
-                self.ready_time = time.time() + self.sleep_after_decision_sec
+            if self.update_local_data(data):
                 if self.cells:
                     self.make_decision()
 
@@ -148,7 +143,7 @@ class Application:
         report_type = data['event']['perf3gppFields']['measDataCollection']['measuredEntityDn']
         if "Cell" not in report_type:
             log.info('Received report is not a Cell report')
-            return
+            return False
 
         self.source_name = data['event']['commonEventHeader']['sourceName']
         self.meas_entity_dist_name = report_type
@@ -157,7 +152,7 @@ class Application:
 
         if not cells:
             log.warning("PM report is lacking measurements")
-            return
+            return False
 
         for cell in cells:
             cId = str(cell['measInfoId']['sMeasInfoId'])
@@ -171,7 +166,7 @@ class Application:
 
             if p == -1:
                 log.error('PM type RRU.PrbTotDl not present')
-                return
+                return False
 
             if cId not in self.cells:
                 self.cells[cId] = {
@@ -187,43 +182,39 @@ class Application:
 
             for measValue in cell['measValuesList']:
                 sValue = measValue['measResults'][p]['sValue']
-                store['prb_usage'].append(float(sValue))
+                store['prb_usage'].append(round(float(sValue), 2))
 
             if store['prb_usage']:
                 store['avg_prb_usage'] = np.mean(store['prb_usage'])
 
         status = "PRB usage: ["
-        candidate_prbs = []
+        candidate_prb = []
         for i, key in enumerate(self.cells.keys()):
             cell = self.cells[key]
             avg_prb_usage = cell["avg_prb_usage"]
 
-            # c1_prbs = [1,2,3]
-            # c2_prbs = [6,7,8]
-            # candidate_prbs = [[1,2,3], [6,7,8]]
-            # sum_of_candidate_prbs = [1+6, 2+7, 3+8]
+            # c1_prb = [1,2,3]
+            # c2_prb = [6,7,8]
+            # candidate_prb = [[1,2,3], [6,7,8]]
+            # candidate_total = [1+6, 2+7, 3+8]
 
             if i in CANDIDATE_CELL_IDS and not np.isnan(avg_prb_usage):
-                candidate_prbs.append(cell['prb_usage'])
+                candidate_prb.append(cell['prb_usage'])
 
             status += f'{cell["id"]}: {avg_prb_usage:.3f}, '
 
-        sum_of_candidate_prbs = [candidate_prbs[0][i] + candidate_prbs[1][i] for i in range(self.slots)]
-        for prb in sum_of_candidate_prbs:
+        candidate_total = [candidate_prb[0][i] + candidate_prb[1][i] for i in range(self.slots)]
+        for prb in candidate_total:
             self.prb_history.append(int(prb))
 
         status = status[:-2] + "] avg: "
         avg_prb = sum(self.cells[cell]["avg_prb_usage"] for cell in self.cells) / sum((self.cells[cell]['state'] != States.DISABLED) for cell in self.cells)
         status += f'{avg_prb:.3f}'
 
-        status += f', [candidate_prbs]: {candidate_prbs}, [sum_of_candidate_prbs]: {sum_of_candidate_prbs}'
+        status += f', [candidate_prb]: {candidate_prb}, [candidate_total]: {candidate_total}'
 
-        energy_all = (300 + 4 * 150) / 1e3
-        energy = (300 + (sum((self.cells[cell]['state'] != States.DISABLED) for cell in self.cells) - 1) * 150) / 1e3
-        energy_per_day = 24 * energy
-        energy_save = (energy_all - energy) * 24
-        status += f', (energy consumption: {energy:.2f}/{energy_all:.2f} W; per day: {energy_per_day:.2f} Wh; per day savings: {energy_save:.2f} Wh)'
         log.info(status)
+        return True
 
     def make_decision(self):
         if len(self.prb_history) < 10:
@@ -239,35 +230,33 @@ class Application:
             record[2] = self.cells[key]['state']
             data.append(record)
 
-        if any(np.nan in record for record in data):
-            return
-
-        total_prb_usage = sum(record[1] for record in data)
-        enabled_cells = sum((record[2] != States.DISABLED) for record in data)
-        disabling_cell = sum((record[2] == States.DISABLING) for record in data)
-
         log.info(f'Checking if a cell should be switched off')
         for record in data:
-            if record[1] == 0 and (record[2] == States.DISABLING):
+            if record[1] == 0 and (record[2] == States.DISABLING) and self.switched_off == True:
                 cell_id = record[0]
                 self.toggle_cell_administrative_state(cell_id, locked=True)
                 self.cells[cell_id]['state'] = States.DISABLED
-                enabled_cells-=1
                 # Because report arrives once per 60s, skip making decision
                 # to avoid OFF->ON in the same time frame.
                 return
 
-        current_avg_prb_usage = total_prb_usage / enabled_cells
-
         log.info(f'Making decision...')
-        log.info(f'Current average PRB usage: {current_avg_prb_usage}')
-        if (max(record[1] for record in data) > 40) and (current_avg_prb_usage > 30):
-            log.info('Max and average PRB usage above thresholds - trying to enable one cell.')
+
+        headers = {'Content-Type': 'application/json', 'Accept':'application/json'}
+        l1 = self.prb_history[:]
+        l = json.dumps(l1)
+        rsp = requests.post(self.load_predictor, headers= headers, json=l)
+        r1 = rsp.json()
+        log.info(f'Input for Load Predictor - {l1}')
+        self.prb_history = self.prb_history[5:]
+        predicted_load = int(r1[0])
+        log.info(f'Predicted load - {predicted_load}')
+
+        if (predicted_load > 95):
+            log.info('Predicted load above threshold - trying to enable one cell.')
             self.enable_one_cell()
-        elif (current_avg_prb_usage < 20) and (disabling_cell == 0):
-            log.info('Average PRB usage below threshold - trying to disable one cell.')
-            future_avg_prb_usage = total_prb_usage / (enabled_cells - 1)
-            log.info(f'Expected PRB usage {future_avg_prb_usage}.')
+        elif (predicted_load < 95) and (self.switched_off == False):
+            log.info('Predicted load below threshold - trying to disable one cell.')
             self.disable_one_cell()
         else:
             log.info('Make cell on/off decision - no action - balance achieved.')
@@ -296,10 +285,13 @@ class Application:
             log.info('There are no cells that could be enabled...')
             return
 
-        cell_id = random.choice(options_filtered)[0]
+        # hardcoded cell to switch on
+        cell_id = "S3/B13/C1"
+
         self.cells[cell_id]['state'] = States.ENABLED
         self.toggle_cell_administrative_state(cell_id, locked=False)
         self.send_command_enable_cell(cell_id)
+        self.switched_off = False
 
     def send_command_enable_cell(self, cell_id):
         log.info(f'Enabling cell {cell_id}')
@@ -321,10 +313,12 @@ class Application:
             log.info('There are no cells that could be disabled...')
             return
 
-        ind = sorted(options_filtered, key=itemgetter(1))[0]
-        cell_id = ind[0]
+        # hardcoded cell to switch off
+        cell_id = "S3/B13/C1"
+
         self.cells[cell_id]['state'] = States.DISABLING
         self.send_command_disable_cell(cell_id)
+        self.switched_off = True
 
     def send_command_disable_cell(self, cell_id):
         cellLocalId = self.policyVariables[cell_id]['cellLocalId']
@@ -345,16 +339,6 @@ class Application:
                                 json=get_example_per_slice_policy(nci, mcc, mnc, qos=1, preference='FORBID'))
         log.info(f'Sending policy (id={index}) for cell {cell_id} [nci={nci}, mcc={mcc}, mnc={mnc}] (FORBID): status_code: {response.status_code}')
         self.cells[cell_id]['policy_list'].append(index)
-
-        # index += 1
-        # while str(index) in current_policies:
-        #     index += 1
-        # response = requests.put(self.a1_url +
-        #                         '/policytypes/ORAN_TrafficSteeringPreference_2.0.0/policies/'
-        #                         + str(index), params=dict(notification_destination='test'),
-        #                         json=get_example_per_slice_policy(nci, mcc, mnc, qos=2, preference='FORBID'))
-        # log.info(f'Sending policy (id={index}) for cell {cell_id} [nci={nci}, mcc={mcc}, mnc={mnc}] (FORBID): status_code: {response.status_code}')
-        # self.cells[cell_id]['policy_list'].append(index)
 
     def delete_policy(self, policy_id: str):
         log.info(f'Deleting policy with id: {policy_id}')
@@ -422,7 +406,6 @@ class Application:
 if __name__ == '__main__':
     app = Application(
         sleep_time_sec=1.0,
-        sleep_after_decision_sec=10.0,
 
         # number of measurements in incoming report: 60 / Aggregation Granularity (O1 Interface Config)
         slots=5
