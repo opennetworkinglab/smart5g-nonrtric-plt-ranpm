@@ -76,10 +76,10 @@ class States(Enum):
     DISABLING = 3
 
 class Application:
-    def __init__(self, sleep_time_sec: float, sleep_after_decision_sec: float, avg_slots: int):
+    def __init__(self, sleep_time_sec: float, sleep_after_decision_sec: float, slots: int):
         self.sleep_time_sec = sleep_time_sec
         self.sleep_after_decision_sec = sleep_after_decision_sec
-        self.avg_slots = avg_slots
+        self.slots = slots
 
         self.cells = {}
         self.cell_urls = {}
@@ -159,7 +159,7 @@ class Application:
             log.warning("PM report is lacking measurements")
             return
 
-        for index, cell in enumerate(cells):
+        for cell in cells:
             cId = str(cell['measInfoId']['sMeasInfoId'])
 
             p = -1
@@ -173,42 +173,50 @@ class Application:
                 log.error('PM type RRU.PrbTotDl not present')
                 return
 
-            sValue = cell['measValuesList'][0]['measResults'][p]['sValue']
-
             if cId not in self.cells:
                 self.cells[cId] = {
                     "id": cId,
                     "state": States.ENABLED,
-                    "prb_usage": np.nan * np.zeros((self.avg_slots, )),
+                    "prb_usage": [],
                     "avg_prb_usage": np.nan,
                     "policy_list": []
                 }
 
             store = self.cells[cId]
-            store['prb_usage'] = np.roll(store['prb_usage'], 1)
-            store['prb_usage'][0] = float(sValue)
+            store['prb_usage'] = []
 
-            if not np.isnan(store['prb_usage']).any():
+            for measValue in cell['measValuesList']:
+                sValue = measValue['measResults'][p]['sValue']
+                store['prb_usage'].append(float(sValue))
+
+            if store['prb_usage']:
                 store['avg_prb_usage'] = np.mean(store['prb_usage'])
 
         status = "PRB usage: ["
-        sum_of_prb_usage = 0
+        candidate_prbs = []
         for i, key in enumerate(self.cells.keys()):
             cell = self.cells[key]
             avg_prb_usage = cell["avg_prb_usage"]
 
+            # c1_prbs = [1,2,3]
+            # c2_prbs = [6,7,8]
+            # candidate_prbs = [[1,2,3], [6,7,8]]
+            # sum_of_candidate_prbs = [1+6, 2+7, 3+8]
+
             if i in CANDIDATE_CELL_IDS and not np.isnan(avg_prb_usage):
-                sum_of_prb_usage += avg_prb_usage
+                candidate_prbs.append(cell['prb_usage'])
 
             status += f'{cell["id"]}: {avg_prb_usage:.3f}, '
 
-        self.prb_history.append(int(sum_of_prb_usage))
+        sum_of_candidate_prbs = [candidate_prbs[0][i] + candidate_prbs[1][i] for i in range(self.slots)]
+        for prb in sum_of_candidate_prbs:
+            self.prb_history.append(int(prb))
 
         status = status[:-2] + "] avg: "
         avg_prb = sum(self.cells[cell]["avg_prb_usage"] for cell in self.cells) / sum((self.cells[cell]['state'] != States.DISABLED) for cell in self.cells)
         status += f'{avg_prb:.3f}'
 
-        status += f', [candidate cells sum of prb usage]: {sum_of_prb_usage:.3f}'
+        status += f', [candidate_prbs]: {candidate_prbs}, [sum_of_candidate_prbs]: {sum_of_candidate_prbs}'
 
         energy_all = (300 + 4 * 150) / 1e3
         energy = (300 + (sum((self.cells[cell]['state'] != States.DISABLED) for cell in self.cells) - 1) * 150) / 1e3
@@ -415,6 +423,8 @@ if __name__ == '__main__':
     app = Application(
         sleep_time_sec=1.0,
         sleep_after_decision_sec=10.0,
-        avg_slots=1
+
+        # number of measurements in incoming report: 60 / Aggregation Granularity (O1 Interface Config)
+        slots=5
     )
     app.work()
