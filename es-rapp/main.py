@@ -235,7 +235,9 @@ class Application:
             if record[1] == 0 and (record[2] == States.DISABLING) and self.switched_off == True:
                 cell_id = record[0]
                 self.toggle_cell_administrative_state(cell_id, locked=True)
+                self.set_tx_power(cell_id, -999)
                 self.cells[cell_id]['state'] = States.DISABLED
+
                 # Because report arrives once per 60s, skip making decision
                 # to avoid OFF->ON in the same time frame.
                 return
@@ -271,6 +273,16 @@ class Application:
         response = requests.put(url, verify=False, auth=self.sdn_controller_auth, json=payload)
         log.info(f'Cell-{sOff} response status:{response.status_code}')
 
+    def set_tx_power(self, cell_id, power):
+        log.info(f'Changing TxPower of cell {cell_id} to {power}')
+        path_base = '/O1/CM/'
+        path_tail = "ManagedElement=1193046,GnbDuFunction=3,NrSectorCarrier=3"
+        url = 'http://' + self.sdn_controller_address + ':' + self.sdn_controller_port + path_base + path_tail
+        payload = { "attributes": {"configuredMaxTxPower": power} }
+        response = requests.put(url, verify=False, auth=self.sdn_controller_auth, json=payload)
+        log.info(f'Change TxPower response status:{response.status_code}')
+
+
     def enable_one_cell(self):
         options = []
         for key in self.cells.keys():
@@ -292,6 +304,7 @@ class Application:
         self.toggle_cell_administrative_state(cell_id, locked=False)
         self.send_command_enable_cell(cell_id)
         self.switched_off = False
+        self.set_tx_power(cell_id, 37)
 
     def send_command_enable_cell(self, cell_id):
         log.info(f'Enabling cell {cell_id}')
