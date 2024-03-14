@@ -27,7 +27,7 @@ from enum import Enum
 
 NCI_LENGTH = 36
 
-CANDIDATE_CELL_IDS = [0,1]
+CANDIDATE_CELL_IDS = [1,2]
 
 def get_example_per_slice_policy(nci: int, mcc: str, mnc: str, qos: int, preference: str):
     ## hardcoded values used for SMaRT-5G demo
@@ -276,7 +276,7 @@ class Application:
     def set_tx_power(self, cell_id, power):
         log.info(f'Changing TxPower of cell {cell_id} to {power}')
         path_base = '/O1/CM/'
-        path_tail = "ManagedElement=1193046,GnbDuFunction=3,NrSectorCarrier=3"
+        path_tail = "ManagedElement=1193046,GnbDuFunction=1,NrSectorCarrier=1"
         url = 'http://' + self.sdn_controller_address + ':' + self.sdn_controller_port + path_base + path_tail
         payload = { "attributes": {"configuredMaxTxPower": power} }
         response = requests.put(url, verify=False, auth=self.sdn_controller_auth, json=payload)
@@ -298,7 +298,7 @@ class Application:
             return
 
         # hardcoded cell to switch on
-        cell_id = "S3/B13/C1"
+        cell_id = "S1/B13/C1"
 
         self.cells[cell_id]['state'] = States.ENABLED
         self.toggle_cell_administrative_state(cell_id, locked=False)
@@ -327,7 +327,7 @@ class Application:
             return
 
         # hardcoded cell to switch off
-        cell_id = "S3/B13/C1"
+        cell_id = "S1/B13/C1"
 
         self.cells[cell_id]['state'] = States.DISABLING
         self.send_command_disable_cell(cell_id)
