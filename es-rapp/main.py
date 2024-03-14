@@ -14,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #  ============LICENSE_END=================================================
-#  !/usr/bin/env python3
+#
 
 import numpy as np
 import requests
@@ -105,7 +105,10 @@ class Application:
             log.error('Unable to connect to A1.')
             return
 
-        self.delete_policy()
+        for policy in policies:
+            # assumed that all policies with ID >= 1000 are from this rApp
+            if int(policy) >= 1000:
+                self.delete_policy(policy)
 
         self.init()
         if not self.cell_urls:
@@ -268,7 +271,7 @@ class Application:
         path_tail = self.cell_urls[cell_id]
         url = 'http://' + self.sdn_controller_address + ':' + self.sdn_controller_port + path_base + path_tail
         payload = { "attributes": {"administrativeState": "LOCKED" if locked else "UNLOCKED"} }
-        response = requests.put(url, auth=self.sdn_controller_auth, json=payload)
+        response = requests.put(url, verify=False, auth=self.sdn_controller_auth, json=payload)
         log.info(f'Cell-{sOff} response status:{response.status_code}')
 
     def set_tx_power(self, cell_id, power):
@@ -351,7 +354,7 @@ class Application:
         log.info(f'Sending policy (id={index}) for cell {cell_id} [nci={nci}, mcc={mcc}, mnc={mnc}] (FORBID): status_code: {response.status_code}')
         self.cells[cell_id]['policy_list'].append(index)
 
-    def delete_policy(self):
+    def delete_policy(self, policy_id: str):
         log.info(f'Deleting policy with id: {policy_id}')
         try:
             requests.delete(self.a1_url +
