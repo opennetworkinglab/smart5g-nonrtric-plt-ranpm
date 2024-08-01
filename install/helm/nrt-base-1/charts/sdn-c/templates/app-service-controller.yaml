@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: controller
+  namespace: nonrtric
+  labels:
+    run: controller
+spec:
+  type: NodePort
+  ports:
+  - port: 8181
+    targetPort: 8181
+    name: http
+    nodePort: 31769
+  - port: 4334
+    targetPort: 4334
+    name: callhome
+    nodePort: 32334
+  selector:
+    run: controller

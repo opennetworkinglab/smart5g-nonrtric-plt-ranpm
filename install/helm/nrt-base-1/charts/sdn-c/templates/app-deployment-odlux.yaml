@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odlux
+  namespace: nonrtric
+  labels:
+    run: odlux
+spec:
+  selector:
+    matchLabels:
+      run: odlux
+  template:
+    metadata:
+      labels:
+        run: odlux
+    spec:
+      containers:
+      - name: odlux
+        image: nexus3.onap.org:10001/onap/sdnc-web-image:2.4.2
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: WEBPROTOCOL
+          value: "HTTP"
+        - name: ENABLE_OAUTH
+          value: "false"
+        - name: WEBPORT
+          value: "8080"
+        - name: SDNRPROTOCOL
+          value: "http"
+        - name: SDNRHOST
+          value: controller.nonrtric
+        - name: SDNRPORT
+          value: "8181"
+        ports:
+        - name: http
+          containerPort: 8080

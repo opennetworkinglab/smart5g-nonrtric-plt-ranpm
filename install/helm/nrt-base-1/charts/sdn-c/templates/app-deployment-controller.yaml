@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller
+  namespace: nonrtric
+  labels:
+    run: controller
+spec:
+  selector:
+    matchLabels:
+      run: controller
+  template:
+    metadata:
+      labels:
+        run: controller
+    spec:
+      volumes:
+        - name: conf-vol1
+          configMap:
+            name: controller-devicemanager.properties
+        - name: conf-vol2
+          configMap:
+            name: controller-mountpoint-registrar.properties
+        - name: conf-vol3
+          configMap:
+            name: controller-keys0.zip
+        - name: conf-vol4
+          configMap:
+            name: controller-certs.properties
+      containers:
+      - name: controller
+        image: nexus3.onap.org:10001/onap/sdnc-image:2.4.2
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: ENABLE_ODL_CLUSTER
+          value: "false"
+        - name: ENABLE_OAUTH
+          value: "false"
+        - name: ODL_CERT_DIR
+          value: /opt/opendaylight/current/certs
+        - name: ODL_ADMIN_PASSWORD
+          value: Kp8bJ4SXszM0WXlhak3eHlcse2gAw84vaoGGmJvUy2U
+        - name: SDNC_CONFIG_DIR
+          value: /opt/onap/ccsdk/data/properties
+        - name: SDNC_REPLICAS
+          value: "0"
+        - name: CCSDK_REPLICAS
+          value: "0"
+        - name: DOMAIN
+          value: ""
+        - name: SDNRWT
+          value: "true"
+        - name: SDNRONLY
+          value: "true"
+        - name: SDNRINIT
+          value: "true"
+        - name: SDNRDM
+          value: "true"
+        - name: SDNRDBURL
+          value: http://persistence.nonrtric:9200
+        - name: SDNR_NETCONF_CALLHOME_ENABLED
+          value: "true"
+        - name: A1_ADAPTER_NORTHBOUND
+          value: "false"
+        - name: JAVA_OPTS
+          value: -Xms256m -Xmx4g
+        - name: IDENTITY_PROVIDER_URL
+          value: ""
+        - name: SDNC_WEB_URL
+          value: ""
+        - name: SDNR_VES_COLLECTOR_ENABLED
+          value: "true"
+        - name: SDNR_VES_COLLECTOR_TLS_ENABLED
+          value: "false"
+        - name: SDNR_VES_COLLECTOR_TRUST_ALL_CERTS
+          value: "true"
+        - name: SDNR_VES_COLLECTOR_IP
+          value: ves-collector.nonrtric
+        - name: SDNR_VES_COLLECTOR_PORT
+          value: "8080"
+        - name: SDNR_VES_COLLECTOR_VERSION
+          value: v7
+        - name: SDNR_VES_COLLECTOR_REPORTING_ENTITY_NAME
+          value: ONAP SDN-R
+        - name: SDNR_VES_COLLECTOR_EVENTLOG_MSG_DETAIL
+          value: LONG
+        - name: SDNR_VES_COLLECTOR_USERNAME
+          value: sample1
+        - name: SDNR_VES_COLLECTOR_PASSWORD
+          value: sample1
+        ports:
+        - name: http
+          containerPort: 8181
+        volumeMounts:
+        - name: conf-vol1
+          mountPath: /opt/opendaylight/etc/devicemanager.properties
+          subPath: devicemanager.properties
+        - name: conf-vol2
+          mountPath: /opt/opendaylight/etc/mountpoint-registrar.properties
+          subPath: mountpoint-registrar.properties
+        - name: conf-vol3
+          mountPath: /opt/opendaylight/current/certs/keys0.zip
+          subPath: keys0.zip
+        - name: conf-vol4
+          mountPath: /opt/opendaylight/current/certs/certs.properties
+          subPath: certs.properties

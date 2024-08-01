@@ -16,5 +16,5 @@
 #
 
 global:
-  extimagerepo: localhost:5000/
+  extimagerepo:
   numhttpsservers: 10

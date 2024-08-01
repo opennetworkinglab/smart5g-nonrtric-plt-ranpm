@@ -21,11 +21,11 @@
 # Optionally push to external image repo
 
 print_usage() {
-    echo "Usage: build.sh no-push|<docker-hub-repo-name> [--tag <image-tag>]"
+    echo "Usage: build.sh no-push|<docker-hub-repo-name> [<image-tag>]"
     exit 1
 }
 
-if [ $# -ne 1 ] && [ $# -ne 3 ]; then
+if [ $# -ne 1 ] && [ $# -ne 2 ]; then
     print_usage
 fi
 

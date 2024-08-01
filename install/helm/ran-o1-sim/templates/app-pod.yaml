@@ -1,25 +1,8 @@
-#  ============LICENSE_START===============================================
-#  Copyright (C) 2023 Tietoevry. All rights reserved.
-#  ========================================================================
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#       http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#  ============LICENSE_END=================================================
-#
-
 apiVersion: v1
 kind: Pod
 metadata:
   name: ran-o1-sim-du
-  namespace: ran
+  namespace: ran-o1-sim
   labels:
     app: ran-o1-sim-du
 spec:
@@ -35,12 +18,8 @@ spec:
       name: ntsim-odu-hello-world-operational-xml
   containers:
   - name: nts-ng-o-ran-du
-    image: {{ .Values.global.extimagerepo }}nts-ng-o-ran-du:1.8.1
-    {{- if .Values.global.extimagerepo }}
-    imagePullPolicy: Always
-    {{- else }}
-    imagePullPolicy: Never
-    {{- end }}
+    image: nexus3.o-ran-sc.org:10002/o-ran-sc/nts-ng-o-ran-du:1.8.1
+    imagePullPolicy: IfNotPresent
     env:
     - name: IPv6_ENABLED
       value: "false"
@@ -74,10 +53,6 @@ spec:
       value: "8080"
     - name: VES_ENDPOINT_AUTH_METHOD
       value: "basic-auth"
-    - name: VES_PM_DATA_SERVER_URL
-      value: https://pm-https-server-0.pm-https-server.ran:443/scenario
-    - name: VES_PM_DATA_FILE_NAME_PATTERN
-      value: O-DU-1211
     - name: CURL_CONNECT_TIMEOUT
       value: "1"
     - name: CURL_OPERATION_TIMEOUT
@@ -87,7 +62,7 @@ spec:
     - name: VES_ENDPOINT_PASSWORD
       value: "sample1"
     - name: NTS_NF_STANDALONE_START_FEATURES
-      value: datastore-populate ves-heartbeat ves-file-ready ves-file-ready-periodic ves-pnf-registration web-cut-through netconf-call-home
+      value: datastore-populate ves-pnf-registration web-cut-through
     volumeMounts:
     - name: config-json
       mountPath: /opt/dev/ntsim-ng/config/config.json

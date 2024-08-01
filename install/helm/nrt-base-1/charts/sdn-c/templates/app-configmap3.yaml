@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: controller-certs.properties
+  namespace: nonrtric
+
+data:
+{{ (.Files.Glob "config/certs/certs.properties").AsConfig | nindent 2 }}

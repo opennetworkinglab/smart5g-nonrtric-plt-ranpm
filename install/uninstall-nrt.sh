@@ -29,13 +29,25 @@ check_error() {
 
 NUM_ERRORS=0
 
+helm uninstall -n nonrtric controlpanel
+check_error $? controlpanel
+helm uninstall -n nonrtric nonrtricgateway
+check_error $? nonrtricgateway
+
+helm uninstall -n ran-o1-sim ran-o1-sim-du
+check_error $? ran-o1-sim
+
 helm uninstall -n ran ran
+check_error $? ran
 
 helm uninstall -n nonrtric nrt-pm
+check_error $? nrt-pm
 
 helm uninstall -n nonrtric nrt-base-1
+check_error $? nrt-base-1
 
 helm uninstall -n nonrtric nrt-base-0
+check_error $? nrt-base-0
 
 INST="strimzi-kafka CRDs"
 echo "##########################"

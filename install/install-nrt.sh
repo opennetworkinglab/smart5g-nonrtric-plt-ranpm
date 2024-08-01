@@ -2,6 +2,7 @@
 
 #  ============LICENSE_START===============================================
 #  Copyright (C) 2023 Nordix Foundation. All rights reserved.
+#  Copyright (C) 2024 OpenInfra Foundation Europe. All rights reserved.
 #  ========================================================================
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -25,6 +26,9 @@
 
 # Constants
 SAMELINE="\033[0K\r"
+EXPECTEDMAJORKUBERNETESVERSION="1"
+EXPECTEDMINORKUBERNETESVERSION="21"
+STRIMZIKAFKAOPERATORVERSION="0.39.0"
 
 # Variables
 export KUBERNETESHOST=$(kube_get_controlplane_host)
@@ -34,9 +38,25 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+KUBERNETESVERSIONINFO=$(kubectl version --short 2>/dev/null || kubectl version 2>/dev/null)
+export KUBERNETESVERSION=$(echo $KUBERNETESVERSIONINFO | grep 'Server Version' | awk '{print $3}')
+if [ $? -ne 0 ]; then
+    echo $KUBERNETESVERSION
+    echo "Exiting"
+    exit 1
+fi
+
+KUBERNETESMAJORVERSION=$(echo ${KUBERNETESVERSION#v} | cut -d. -f1)
+KUBERNETESMINORVERSION=$(echo $KUBERNETESVERSION | cut -d. -f2)
 echo "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 echo "Kubernetes control plane host: $KUBERNETESHOST"
 echo "Host obtained from current kubectl context"
+echo "Kubernetes version : $KUBERNETESVERSION"
+if ((KUBERNETESMAJORVERSION < EXPECTEDMAJORKUBERNETESVERSION)) || ((KUBERNETESMINORVERSION < EXPECTEDMINORKUBERNETESVERSION)); then
+    echo "Required minimum Kubernetes version : $EXPECTEDMAJORKUBERNETESVERSION.$EXPECTEDMINORKUBERNETESVERSION"
+    echo "Aborting..."
+    exit 1
+fi
 echo "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
 echo "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
@@ -61,14 +81,6 @@ echo " Checking if envsubst is installed"
 tmp=$(type envsubst)
 if [ $? -ne 0 ]; then
 	echo "  Command utility envsubst (env var substitution in files) is not installed"
-	exit 1
-else
-    echo "  OK"
-fi
-echo " Checking if keytool is installed"
-tmp=$(type keytool)
-if [ $? -ne 0 ]; then
-	echo "  Command utility keytool (a key and certificate management utility) is not installed"
 	exit 1
 else
     echo "  OK"
@@ -122,7 +134,8 @@ echo "##### Installing charts: strimzi and nrt-base-1"
 
 helm repo add strimzi https://strimzi.io/charts/
 
-helm install --wait strimzi-kafka-crds -n nonrtric strimzi/strimzi-kafka-operator
+echo "Installing Strimzi Kafka operator version: $STRIMZIKAFKAOPERATORVERSION"
+helm install --wait strimzi-kafka-crds -n nonrtric strimzi/strimzi-kafka-operator --version $STRIMZIKAFKAOPERATORVERSION
 
 
 cp opa-rules/bundle.tar.gz helm/nrt-base-1/charts/opa-rule-db/data
@@ -183,13 +196,35 @@ done
 echo ""
 
 ##################################################################################
-echo "##### Installing: chart ran"
+echo "##### Installing: chart nonrtricgateway"
 ##################################################################################
 
-./helm/ran/certs/gen-certs.sh 10
-check_error $?
+helm install --wait -n nonrtric nonrtricgateway helm/nonrtricgateway
+echo ""
 
-helm install --wait --create-namespace -n ran -f helm/global-values.yaml ran helm/ran --set WORKDIR=$(pwd)
+##################################################################################
+echo "##### Installing: chart controlpanel"
+##################################################################################
+
+helm install --wait -n nonrtric controlpanel helm/controlpanel
+echo ""
+
+# ##################################################################################
+# echo "##### Installing: chart ran"
+# ##################################################################################
+
+# ./helm/ran/certs/gen-certs.sh 10
+# check_error $?
+
+# helm install --wait --create-namespace -n ran -f helm/global-values.yaml ran helm/ran
+
+# echo ""
+
+##################################################################################
+echo "##### Installing: chart ran-o1-sim"
+##################################################################################
+
+helm install --wait --create-namespace -n ran-o1-sim -f helm/global-values.yaml ran-o1-sim-du helm/ran-o1-sim
 
 echo ""
 
